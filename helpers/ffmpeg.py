@@ -1,5 +1,3 @@
-# (c) Shrimadhav U K & @AbirHasan2005
-
 import asyncio
 import os
 import time
@@ -7,18 +5,32 @@ from configs import Config
 from pyrogram.types import Message
 
 
-async def MergeVideo(input_file: str, user_id: int, message: Message, format_: str):
-    """
-    This is for Merging Videos Together!
+async def run_ffmpeg_command(command):
+    """Run an FFmpeg command asynchronously and return the output."""
+    process = await asyncio.create_subprocess_exec(
+        *command,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await process.communicate()
+    return stdout.decode().strip(), stderr.decode().strip()
 
-    :param input_file: input.txt file's location.
-    :param user_id: Pass user_id as integer.
-    :param message: Pass Editable Message for Showing FFmpeg Progress.
-    :param format_: Pass File Extension.
-    :return: This will return Merged Video File Path
-    """
 
-    output_vid = f"{Config.DOWN_PATH}/{str(user_id)}/[@AbirHasan2005]_Merged.{format_.lower()}"
+async def merge_video(input_file: str, user_id: int, message: Message, format_: str):
+    """
+    Merge videos together.
+
+    Args:
+        input_file (str): The path to the input.txt file.
+        user_id (int): User ID to create output path.
+        message (Message): Editable message for showing progress.
+        format_ (str): Output file extension.
+
+    Returns:
+        str or None: Path to the merged video file or None if failed.
+    """
+    
+    output_vid = f"{Config.DOWN_PATH}/{user_id}/[@AbirHasan2005]_Merged.{format_.lower()}"
     file_generator_command = [
         "ffmpeg",
         "-f",
@@ -31,34 +43,39 @@ async def MergeVideo(input_file: str, user_id: int, message: Message, format_: s
         "copy",
         output_vid
     ]
-    process = None
+
     try:
-        process = await asyncio.create_subprocess_exec(
-            *file_generator_command,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-    except NotImplementedError:
-        await message.edit(
-            text="Unable to Execute FFmpeg Command! Got `NotImplementedError` ...\n\nPlease run bot in a Linux/Unix Environment."
-        )
-        await asyncio.sleep(10)
-        return None
-    await message.edit("Merging Video Now ...\n\nPlease Keep Patience ...")
-    stdout, stderr = await process.communicate()
-    e_response = stderr.decode().strip()
-    t_response = stdout.decode().strip()
-    print(e_response)
-    print(t_response)
-    if os.path.lexists(output_vid):
-        return output_vid
-    else:
+        await message.edit("Merging Video Now ...\n\nPlease Keep Patience ...")
+        stdout, stderr = await run_ffmpeg_command(file_generator_command)
+        print(stdout)
+        print(stderr)
+        
+        if os.path.lexists(output_vid):
+            return output_vid
+        else:
+            print("Merged video file does not exist.")
+            return None
+    except Exception as e:
+        await message.edit(f"An error occurred while merging videos: {e}")
         return None
 
 
-async def cult_small_video(video_file, output_directory, start_time, end_time, format_):
-    # https://stackoverflow.com/a/13891070/4723940
-    out_put_file_name = output_directory + str(round(time.time())) + "." + format_.lower()
+async def cut_small_video(video_file: str, output_directory: str, start_time: int, end_time: int, format_: str):
+    """
+    Cut a small portion from the video.
+
+    Args:
+        video_file (str): Path to the video file.
+        output_directory (str): Directory to save the cut video.
+        start_time (int): Start time in seconds.
+        end_time (int): End time in seconds.
+        format_ (str): Output file extension.
+
+    Returns:
+        str or None: Path to the cut video file or None if failed.
+    """
+    
+    output_file_name = os.path.join(output_directory, f"{round(time.time())}.{format_.lower()}")
     file_generator_command = [
         "ffmpeg",
         "-i",
@@ -71,31 +88,45 @@ async def cult_small_video(video_file, output_directory, start_time, end_time, f
         "1",
         "-strict",
         "-2",
-        out_put_file_name
+        output_file_name
     ]
-    process = await asyncio.create_subprocess_exec(
-        *file_generator_command,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    stdout, stderr = await process.communicate()
-    e_response = stderr.decode().strip()
-    t_response = stdout.decode().strip()
-    print(e_response)
-    print(t_response)
-    if os.path.lexists(out_put_file_name):
-        return out_put_file_name
+    
+    stdout, stderr = await run_ffmpeg_command(file_generator_command)
+    print(stdout)
+    print(stderr)
+
+    if os.path.lexists(output_file_name):
+        return output_file_name
     else:
+        print("Cut video file does not exist.")
         return None
 
 
-async def generate_screen_shots(video_file, output_directory, no_of_photos, duration):
-    images = list()
+async def generate_screenshots(video_file: str, output_directory: str, no_of_photos: int, duration: int):
+    """
+    Generate screenshots from the video at equal intervals.
+
+    Args:
+        video_file (str): Path to the video file.
+        output_directory (str): Directory to save screenshots.
+        no_of_photos (int): Number of screenshots to take.
+        duration (int): Duration of the video in seconds.
+
+    Returns:
+        list: List of paths to generated screenshots.
+    """
+    
+    if duration <= 0 or no_of_photos <= 0:
+        print("Invalid duration or number of photos.")
+        return []
+
+    images = []
     ttl_step = duration // no_of_photos
     current_ttl = ttl_step
-    for looper in range(no_of_photos):
-        await asyncio.sleep(1)
-        video_thumbnail = f"{output_directory}/{str(time.time())}.jpg"
+
+    for _ in range(no_of_photos):
+        await asyncio.sleep(1)  # Optional: delay for better processing
+        video_thumbnail = os.path.join(output_directory, f"{str(time.time())}.jpg")
         file_generator_command = [
             "ffmpeg",
             "-ss",
@@ -106,16 +137,13 @@ async def generate_screen_shots(video_file, output_directory, no_of_photos, dura
             "1",
             video_thumbnail
         ]
-        process = await asyncio.create_subprocess_exec(
-            *file_generator_command,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await process.communicate()
-        e_response = stderr.decode().strip()
-        t_response = stdout.decode().strip()
-        print(e_response)
-        print(t_response)
+
+        stdout, stderr = await run_ffmpeg_command(file_generator_command)
+        print(stdout)
+        print(stderr)
+        
+        if os.path.lexists(video_thumbnail):
+            images.append(video_thumbnail)
         current_ttl += ttl_step
-        images.append(video_thumbnail)
+
     return images
